@@ -15,6 +15,7 @@ import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
+import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.Vec3d;
 import org.spongepowered.asm.mixin.Mixin;
@@ -57,6 +58,13 @@ public abstract class BlocksAttacksComponentMixin {
         int level = EnchantmentHelper.getLevel(windRiposteEntry, shield);
         if (level <= 0) return;
 
+        // --- DEBUG: durability shred so we KNOW it fired ---
+        int extraDamage = level * 5;
+        shield.damage(extraDamage, player, player.getPreferredEquipmentSlot(shield));
+
+        // Quick HUD message so you can see level + damage
+        player.sendMessage(Text.literal("§b[WindRiposte] lvl " + level + " → shield dmg +" + extraDamage), true);
+
         // --- Direction: push attacker away from player (horizontal) ---
         Vec3d attackerPos = new Vec3d(attacker.getX(), attacker.getY(), attacker.getZ());
         Vec3d playerPos   = new Vec3d(player.getX(), player.getY(), player.getZ());
@@ -78,7 +86,6 @@ public abstract class BlocksAttacksComponentMixin {
         attacker.velocityDirty = true;
 
         // --- Wind-y particles + sound ---
-        // Particles: gust swirl around attacker
         world.spawnParticles(
                 ParticleTypes.GUST,
                 attacker.getX(),
@@ -89,7 +96,6 @@ public abstract class BlocksAttacksComponentMixin {
                 0.02                   // speed
         );
 
-        // Sound: breeze wind burst vibe
         world.playSound(
                 null,
                 attacker.getX(),
