@@ -15,7 +15,6 @@ import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
-import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.Vec3d;
 import org.spongepowered.asm.mixin.Mixin;
@@ -26,7 +25,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(BlocksAttacksComponent.class)
 public abstract class BlocksAttacksComponentMixin {
 
-    // In 1.21.11 this method is static, so the injector MUST be static.
     @Inject(method = "applyShieldCooldown", at = @At("HEAD"))
     private static void windriposte$onShieldDisabled(
             ServerWorld world,
@@ -42,30 +40,24 @@ public abstract class BlocksAttacksComponentMixin {
         if (!(defender instanceof PlayerEntity player)) return;
         if (shield == null || shield.isEmpty()) return;
 
-        // Grab attacker stored by your other hook (WindRiposteState)
         LivingEntity attacker = ((WindRiposteState) defender).windriposte$getLastAttacker();
         ((WindRiposteState) defender).windriposte$clearLastAttacker();
-        if (attacker == null) return;
-        if (attacker.isRemoved()) return;
+        if (attacker == null || attacker.isRemoved()) return;
 
-        // --- Enchantment check (this makes it "an enchantment") ---
-        Registry<Enchantment> enchReg = world.getRegistryManager().getOrThrow(RegistryKeys.ENCHANTMENT);
+        // --- Enchantment lookup ---
+        Registry<Enchantment> enchReg =
+                world.getRegistryManager().getOrThrow(RegistryKeys.ENCHANTMENT);
 
         Identifier id = Identifier.of(WindRiposteMod.MODID, "wind_riposte");
-        RegistryEntry<Enchantment> windRiposteEntry = enchReg.getEntry(id).orElse(null);
+        RegistryEntry<Enchantment> windRiposteEntry =
+                enchReg.getEntry(id).orElse(null);
+
         if (windRiposteEntry == null) return;
 
         int level = EnchantmentHelper.getLevel(windRiposteEntry, shield);
         if (level <= 0) return;
 
-        // --- DEBUG: durability shred so we KNOW it fired ---
-        int extraDamage = level * 5;
-        shield.damage(extraDamage, player, player.getPreferredEquipmentSlot(shield));
-
-        // Quick HUD message so you can see level + damage
-        player.sendMessage(Text.literal("§b[WindRiposte] lvl " + level + " → shield dmg +" + extraDamage), true);
-
-        // --- Direction: push attacker away from player (horizontal) ---
+        // --- Direction ---
         Vec3d attackerPos = new Vec3d(attacker.getX(), attacker.getY(), attacker.getZ());
         Vec3d playerPos   = new Vec3d(player.getX(), player.getY(), player.getZ());
 
@@ -75,27 +67,29 @@ public abstract class BlocksAttacksComponentMixin {
         if (dir.lengthSquared() < 1.0E-6) return;
         dir = dir.normalize();
 
-        // --- Balance by level ---
-        // Level 1: noticeable shove
-        // Level 2: strong shove
-        // Level 3: "get outta my face" shove
-        double strength = 1.25 + 0.75 * (level - 1); // 1.25, 2.0, 2.75
-        double lift     = 0.15 + 0.10 * (level - 1); // 0.15, 0.25, 0.35
+        // --- Level scaling ---
+        double strength = 1.25 + 0.75 * (level - 1);
+        double lift     = 0.15 + 0.10 * (level - 1);
 
         attacker.addVelocity(dir.x * strength, lift, dir.z * strength);
         attacker.velocityDirty = true;
 
-        // --- Wind-y particles + sound ---
+        // --- Extra durability loss ---
+        int extraDamage = level * 5;
+        shield.damage(extraDamage, player, p -> {});
+
+        // --- Wind particles ---
         world.spawnParticles(
                 ParticleTypes.GUST,
                 attacker.getX(),
                 attacker.getBodyY(0.5),
                 attacker.getZ(),
-                10 + (level * 8),      // count
-                0.25, 0.15, 0.25,      // spread
-                0.02                   // speed
+                10 + (level * 8),
+                0.25, 0.15, 0.25,
+                0.02
         );
 
+        // --- Wind sound ---
         world.playSound(
                 null,
                 attacker.getX(),
