@@ -15,6 +15,7 @@ import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
+import net.minecraft.util.Hand;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.Vec3d;
 import org.spongepowered.asm.mixin.Mixin;
@@ -25,6 +26,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(BlocksAttacksComponent.class)
 public abstract class BlocksAttacksComponentMixin {
 
+    // In 1.21.11 this method is static, so the injector MUST be static.
     @Inject(method = "applyShieldCooldown", at = @At("HEAD"))
     private static void windriposte$onShieldDisabled(
             ServerWorld world,
@@ -40,24 +42,23 @@ public abstract class BlocksAttacksComponentMixin {
         if (!(defender instanceof PlayerEntity player)) return;
         if (shield == null || shield.isEmpty()) return;
 
+        // Grab attacker stored by your other hook (WindRiposteState)
         LivingEntity attacker = ((WindRiposteState) defender).windriposte$getLastAttacker();
         ((WindRiposteState) defender).windriposte$clearLastAttacker();
-        if (attacker == null || attacker.isRemoved()) return;
+        if (attacker == null) return;
+        if (attacker.isRemoved()) return;
 
-        // --- Enchantment lookup ---
-        Registry<Enchantment> enchReg =
-                world.getRegistryManager().getOrThrow(RegistryKeys.ENCHANTMENT);
+        // --- Enchantment check ---
+        Registry<Enchantment> enchReg = world.getRegistryManager().getOrThrow(RegistryKeys.ENCHANTMENT);
 
         Identifier id = Identifier.of(WindRiposteMod.MODID, "wind_riposte");
-        RegistryEntry<Enchantment> windRiposteEntry =
-                enchReg.getEntry(id).orElse(null);
-
+        RegistryEntry<Enchantment> windRiposteEntry = enchReg.getEntry(id).orElse(null);
         if (windRiposteEntry == null) return;
 
         int level = EnchantmentHelper.getLevel(windRiposteEntry, shield);
         if (level <= 0) return;
 
-        // --- Direction ---
+        // --- Direction: push attacker away from player (horizontal) ---
         Vec3d attackerPos = new Vec3d(attacker.getX(), attacker.getY(), attacker.getZ());
         Vec3d playerPos   = new Vec3d(player.getX(), player.getY(), player.getZ());
 
@@ -67,18 +68,19 @@ public abstract class BlocksAttacksComponentMixin {
         if (dir.lengthSquared() < 1.0E-6) return;
         dir = dir.normalize();
 
-        // --- Level scaling ---
-        double strength = 1.25 + 0.75 * (level - 1);
-        double lift     = 0.15 + 0.10 * (level - 1);
+        // --- Balance by level ---
+        double strength = 1.25 + 0.75 * (level - 1); // 1.25, 2.0, 2.75
+        double lift     = 0.15 + 0.10 * (level - 1); // 0.15, 0.25, 0.35
 
         attacker.addVelocity(dir.x * strength, lift, dir.z * strength);
         attacker.velocityDirty = true;
 
         // --- Extra durability loss ---
         int extraDamage = level * 5;
-        shield.damage(extraDamage, player, p -> {});
+        // If the shield is ALWAYS in offhand for your use-case:
+        shield.damage(extraDamage, player, Hand.OFF_HAND);
 
-        // --- Wind particles ---
+        // --- Wind-y particles + sound ---
         world.spawnParticles(
                 ParticleTypes.GUST,
                 attacker.getX(),
@@ -89,7 +91,6 @@ public abstract class BlocksAttacksComponentMixin {
                 0.02
         );
 
-        // --- Wind sound ---
         world.playSound(
                 null,
                 attacker.getX(),
