@@ -62,8 +62,10 @@ public abstract class BlocksAttacksComponentMixin {
         double lift     = 0.15 + 0.10 * (level - 1); // 0.15, 0.25, 0.35...
 
         // --- Reliable knockback (works better for players) ---
-        double dx = attacker.getX() - player.getX();
-        double dz = attacker.getZ() - player.getZ();
+        double dx = player.getX() - attacker.getX();
+double dz = player.getZ() - attacker.getZ();
+attacker.takeKnockback(strength, dx, dz);
+
         attacker.takeKnockback(strength, dx, dz);
         attacker.addVelocity(0.0, lift, 0.0);
         attacker.velocityDirty = true;
