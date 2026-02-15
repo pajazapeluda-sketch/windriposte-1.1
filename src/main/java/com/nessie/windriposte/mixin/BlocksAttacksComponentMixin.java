@@ -8,16 +8,17 @@ import net.minecraft.enchantment.EnchantmentHelper;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
+import net.minecraft.network.packet.s2c.play.EntityVelocityUpdateS2CPacket;
 import net.minecraft.particle.ParticleTypes;
 import net.minecraft.registry.Registry;
 import net.minecraft.registry.RegistryKeys;
 import net.minecraft.registry.entry.RegistryEntry;
+import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.Hand;
 import net.minecraft.util.Identifier;
-import net.minecraft.util.math.Vec3d;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -42,15 +43,13 @@ public abstract class BlocksAttacksComponentMixin {
         if (!(defender instanceof PlayerEntity player)) return;
         if (shield == null || shield.isEmpty()) return;
 
-        // Grab attacker stored by your other hook (WindRiposteState)
+        // Attacker stored by your other hook (WindRiposteState)
         LivingEntity attacker = ((WindRiposteState) defender).windriposte$getLastAttacker();
         ((WindRiposteState) defender).windriposte$clearLastAttacker();
-        if (attacker == null) return;
-        if (attacker.isRemoved()) return;
+        if (attacker == null || attacker.isRemoved()) return;
 
         // --- Enchantment check ---
         Registry<Enchantment> enchReg = world.getRegistryManager().getOrThrow(RegistryKeys.ENCHANTMENT);
-
         Identifier id = Identifier.of(WindRiposteMod.MODID, "wind_riposte");
         RegistryEntry<Enchantment> windRiposteEntry = enchReg.getEntry(id).orElse(null);
         if (windRiposteEntry == null) return;
@@ -58,27 +57,26 @@ public abstract class BlocksAttacksComponentMixin {
         int level = EnchantmentHelper.getLevel(windRiposteEntry, shield);
         if (level <= 0) return;
 
-        // --- Direction: push attacker away from player (horizontal) ---
-        Vec3d attackerPos = new Vec3d(attacker.getX(), attacker.getY(), attacker.getZ());
-        Vec3d playerPos   = new Vec3d(player.getX(), player.getY(), player.getZ());
-
-        Vec3d dir = attackerPos.subtract(playerPos);
-        dir = new Vec3d(dir.x, 0.0, dir.z);
-
-        if (dir.lengthSquared() < 1.0E-6) return;
-        dir = dir.normalize();
-
         // --- Balance by level ---
-        double strength = 1.25 + 0.75 * (level - 1); // 1.25, 2.0, 2.75
-        double lift     = 0.15 + 0.10 * (level - 1); // 0.15, 0.25, 0.35
+        double strength = 1.25 + 0.75 * (level - 1); // 1.25, 2.0, 2.75...
+        double lift     = 0.15 + 0.10 * (level - 1); // 0.15, 0.25, 0.35...
 
-        attacker.addVelocity(dir.x * strength, lift, dir.z * strength);
+        // --- Reliable knockback (works better for players) ---
+        double dx = attacker.getX() - player.getX();
+        double dz = attacker.getZ() - player.getZ();
+        attacker.takeKnockback(strength, dx, dz);
+        attacker.addVelocity(0.0, lift, 0.0);
         attacker.velocityDirty = true;
 
-        // --- Extra durability loss ---
+        // Force sync for other clients (THIS is the big fix for PvP testing)
+        if (attacker instanceof ServerPlayerEntity sp) {
+            sp.networkHandler.sendPacket(new EntityVelocityUpdateS2CPacket(sp));
+        }
+
+        // --- Durability cost (keep this) ---
         int extraDamage = level * 5;
-        // If the shield is ALWAYS in offhand for your use-case:
-        shield.damage(extraDamage, player, Hand.OFF_HAND);
+        Hand hand = (player.getOffHandStack() == shield) ? Hand.OFF_HAND : Hand.MAIN_HAND;
+        shield.damage(extraDamage, player, hand);
 
         // --- Wind-y particles + sound ---
         world.spawnParticles(
