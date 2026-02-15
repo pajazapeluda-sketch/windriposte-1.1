@@ -15,8 +15,11 @@ public abstract class PlayerEntityRiposteInhaleMixin {
 
     @Inject(method = "tick", at = @At("TAIL"))
     private void windriposte$playInhaleWhenShieldReturns(CallbackInfo ci) {
-        PlayerEntity player = (PlayerEntity) (Object) this;
-        if (!(player.getWorld() instanceof ServerWorld world)) return;
+
+        PlayerEntity player = (PlayerEntity)(Object)this;
+
+        // Use field access instead of getWorld()
+        if (!(player.world instanceof ServerWorld world)) return;
 
         WindRiposteState state = (WindRiposteState) player;
 
@@ -26,7 +29,7 @@ public abstract class PlayerEntityRiposteInhaleMixin {
         long now = world.getTime();
         if (now < inhaleTick) return;
 
-        // Play inhale exactly once
+        // Reset so it only plays once
         state.windriposte$setInhaleTick(0L);
 
         world.playSound(
