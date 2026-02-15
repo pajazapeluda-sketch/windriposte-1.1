@@ -16,36 +16,37 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.Identifier;
-import net.minecraft.util.math.Box;
+import net.minecraft.util.math.Vec3d;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import java.util.List;
-
 @Mixin(BlocksAttacksComponent.class)
 public abstract class BlocksAttacksComponentMixin {
 
-    // 1.21.11: applyShieldCooldown is static
+    // Tune these by ear / feel:
+    private static final long VANILLA_DISABLE_TICKS = 5L * 20L; // 5 seconds
+    private static final long INHALE_TICKS = 30L;              // ~1.5 seconds (adjust until it matches the sound)
+
     @Inject(method = "applyShieldCooldown", at = @At("HEAD"))
-    private static void windriposte$onShieldDisabled(
-            ServerWorld world,
-            LivingEntity defender,
-            float amount,
-            ItemStack shield,
-            CallbackInfo ci
-    ) {
-        doRiposteAoE(world, defender, shield);
+    private static void windriposte$onShieldDisabled(ServerWorld world, LivingEntity defender, float amount, ItemStack shield, CallbackInfo ci) {
+        doRiposte(world, defender, shield);
     }
 
-    private static void doRiposteAoE(ServerWorld world, LivingEntity defender, ItemStack shield) {
+    private static void doRiposte(ServerWorld world, LivingEntity defender, ItemStack shield) {
         if (!(defender instanceof PlayerEntity player)) return;
         if (shield == null || shield.isEmpty()) return;
 
-        // Stored attacker (used as "proof" that a real attacker caused this cooldown)
-        LivingEntity attacker = ((WindRiposteState) defender).windriposte$getLastAttacker();
-        ((WindRiposteState) defender).windriposte$clearLastAttacker();
+        WindRiposteState state = (WindRiposteState) defender;
+        long now = world.getTime();
+
+        // If we’re still in the “not armed yet” window, do nothing.
+        if (now < state.windriposte$getNextRiposteTick()) return;
+
+        // Grab attacker stored by LivingEntityStoreAttackerMixin
+        LivingEntity attacker = state.windriposte$getLastAttacker();
+        state.windriposte$clearLastAttacker();
         if (attacker == null || attacker.isRemoved()) return;
 
         // Enchantment check
@@ -57,48 +58,39 @@ public abstract class BlocksAttacksComponentMixin {
         int level = EnchantmentHelper.getLevel(windRiposteEntry, shield);
         if (level <= 0) return;
 
-        // Balance knobs by level
-        double radius   = 2.75 + 0.75 * (level - 1);   // L1 2.75, L2 3.5, L3 4.25
-        double strength = 0.90 + 0.45 * (level - 1);   // L1 0.90, L2 1.35, L3 1.80
-        double lift     = 0.10 + 0.08 * (level - 1);   // L1 0.10, L2 0.18, L3 0.26
+        // Schedule: inhale at shield-return time, then enchant becomes active after inhale duration.
+        long inhaleAt = now + VANILLA_DISABLE_TICKS;
+        state.windriposte$setInhaleTick(inhaleAt);
 
-        // Find nearby living entities (AoE)
-        Box box = player.getBoundingBox().expand(radius, 1.25, radius);
+        long armedAt = inhaleAt + INHALE_TICKS;
+        state.windriposte$setNextRiposteTick(armedAt);
 
-        List<LivingEntity> targets = world.getEntitiesByClass(
+        // AoE launch (same strength all around)
+        double radius = 3.0 + 0.75 * level;
+        double strength = 1.25 + 0.75 * (level - 1);
+        double lift = 0.15 + 0.10 * (level - 1);
+
+        for (LivingEntity target : world.getEntitiesByClass(
                 LivingEntity.class,
-                box,
-                e -> e != null
-                        && e.isAlive()
-                        && e != player
-                        && !e.isRemoved()
-                        // don’t fling spectators/creative players
-                        && (!(e instanceof PlayerEntity pe) || (!pe.isSpectator() && !pe.getAbilities().creativeMode))
-        );
+                defender.getBoundingBox().expand(radius),
+                e -> e != null && e.isAlive() && e != defender
+        )) {
+            Vec3d dir = new Vec3d(target.getX() - player.getX(), 0.0, target.getZ() - player.getZ());
+            if (dir.lengthSquared() < 1.0E-6) continue;
+            dir = dir.normalize();
 
-        if (targets.isEmpty()) return;
-
-        // Apply knockback away from the defender
-        for (LivingEntity t : targets) {
-            double dx = player.getX() - t.getX(); // correct direction for takeKnockback
-            double dz = player.getZ() - t.getZ();
-
-            // If somehow perfectly aligned (rare), skip
-            if ((dx * dx + dz * dz) < 1.0E-6) continue;
-
-            t.takeKnockback(strength, dx, dz);
-            t.addVelocity(0.0, lift, 0.0);
-            t.velocityDirty = true;
+            target.addVelocity(dir.x * strength, lift, dir.z * strength);
+            target.velocityDirty = true;
         }
 
-        // Particles + sound (centered on defender)
+        // Particles + sound for the burst itself
         world.spawnParticles(
                 ParticleTypes.GUST,
                 player.getX(),
                 player.getBodyY(0.5),
                 player.getZ(),
-                16 + (level * 10),
-                0.6, 0.2, 0.6,
+                12 + (level * 10),
+                0.35, 0.20, 0.35,
                 0.02
         );
 
@@ -112,14 +104,5 @@ public abstract class BlocksAttacksComponentMixin {
                 1.0f,
                 1.0f
         );
-
-        // Extra durability cost (keep your tradeoff)
-        // NOTE: this stacks on top of normal blocking damage
-        int extraDamage = level * 5;
-
-        // IMPORTANT: ItemStack.damage in 1.21.11 needs a slot/hand, not a lambda
-        // We’ll just damage it directly (no break animation callback needed)
-        // This works fine server-side.
-        shield.damage(extraDamage, player, player.getActiveHand());
     }
 }
