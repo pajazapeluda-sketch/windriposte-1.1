@@ -62,17 +62,19 @@ public abstract class BlocksAttacksComponentMixin {
         state.windriposte$clearLastAttacker();
         if (attacker == null || attacker.isRemoved()) return;
 
-        // Push all around you (your current “AOE yeet” design)
+        // Push all around you
         final double strength = 1.25 + 0.75 * (level - 1);
         final double lift     = 0.15 + 0.10 * (level - 1);
 
-        Vec3d center = player.getPos();
+        Vec3d center = new Vec3d(player.getX(), player.getY(), player.getZ());
+
         for (LivingEntity e : world.getEntitiesByClass(
                 LivingEntity.class,
                 player.getBoundingBox().expand(4.0),
                 ent -> ent != player && !ent.isRemoved()
         )) {
-            Vec3d dir = e.getPos().subtract(center);
+            Vec3d ePos = new Vec3d(e.getX(), e.getY(), e.getZ());
+            Vec3d dir = ePos.subtract(center);
             dir = new Vec3d(dir.x, 0.0, dir.z);
             if (dir.lengthSquared() < 1.0E-6) continue;
             dir = dir.normalize();
