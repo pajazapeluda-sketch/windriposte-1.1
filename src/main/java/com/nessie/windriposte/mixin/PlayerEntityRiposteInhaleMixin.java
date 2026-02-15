@@ -5,6 +5,7 @@ import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
+import net.minecraft.world.World;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -15,11 +16,10 @@ public abstract class PlayerEntityRiposteInhaleMixin {
 
     @Inject(method = "tick", at = @At("TAIL"))
     private void windriposte$playInhaleWhenShieldReturns(CallbackInfo ci) {
-
         PlayerEntity player = (PlayerEntity)(Object)this;
 
-        // Use field access instead of getWorld()
-        if (!(player.world instanceof ServerWorld world)) return;
+        World w = ((EntityWorldAccessor) player).windriposte$getWorld();
+        if (!(w instanceof ServerWorld world)) return;
 
         WindRiposteState state = (WindRiposteState) player;
 
@@ -29,14 +29,12 @@ public abstract class PlayerEntityRiposteInhaleMixin {
         long now = world.getTime();
         if (now < inhaleTick) return;
 
-        // Reset so it only plays once
+        // play once
         state.windriposte$setInhaleTick(0L);
 
         world.playSound(
                 null,
-                player.getX(),
-                player.getY(),
-                player.getZ(),
+                player.getX(), player.getY(), player.getZ(),
                 SoundEvents.ENTITY_BREEZE_INHALE,
                 SoundCategory.PLAYERS,
                 1.0f,
