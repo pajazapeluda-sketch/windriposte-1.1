@@ -1,35 +1,35 @@
 package com.nessie.windriposte;
 
-import com.nessie.windriposte.mixin.EntityWorldAccessor;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
-import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
 
 public class WindRiposteMod implements ModInitializer {
-
     public static final String MODID = "windriposte";
-
-    // global “server tick counter”
-    public static long TICK = 0;
 
     @Override
     public void onInitialize() {
+
+        // Server tick: play inhale/land sounds & re-arm at the right time
         ServerTickEvents.END_SERVER_TICK.register(server -> {
-            TICK++;
+            long tick = server.getTicks();
 
-            for (PlayerEntity player : server.getPlayerManager().getPlayerList()) {
-                WindRiposteState state = (WindRiposteState) player;
+            for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
 
-                // get ServerWorld safely using accessor (since your mappings hide getWorld())
-                if (!(((EntityWorldAccessor) player).windriposte$getWorld() instanceof ServerWorld world)) continue;
+                // ✅ NEVER hard-cast. If mixin didn't apply, we just skip.
+                if (!(player instanceof WindRiposteState state)) continue;
 
-                // LAND (exact moment shield cooldown ends)
+                ServerWorld world = server.getWorld(player.getWorld().getRegistryKey());
+                if (world == null) continue;
+
                 long landTick = state.windriposte$getLandTick();
-                if (landTick >= 0 && !state.windriposte$getPlayedLand() && TICK >= landTick) {
+                if (landTick >= 0 && !state.windriposte$getPlayedLand() && tick >= landTick) {
                     state.windriposte$setPlayedLand(true);
+
+                    // "land" = exact moment shield is back
                     world.playSound(
                             null,
                             player.getX(), player.getY(), player.getZ(),
@@ -40,10 +40,11 @@ public class WindRiposteMod implements ModInitializer {
                     );
                 }
 
-                // INHALE (lead-up)
                 long inhaleTick = state.windriposte$getInhaleTick();
-                if (inhaleTick >= 0 && !state.windriposte$getPlayedInhale() && TICK >= inhaleTick) {
+                if (inhaleTick >= 0 && !state.windriposte$getPlayedInhale() && tick >= inhaleTick) {
                     state.windriposte$setPlayedInhale(true);
+
+                    // "inhale" = lead-up sound
                     world.playSound(
                             null,
                             player.getX(), player.getY(), player.getZ(),
@@ -54,17 +55,14 @@ public class WindRiposteMod implements ModInitializer {
                     );
                 }
 
-                // ready again
                 long readyTick = state.windriposte$getReadyTick();
-                if (readyTick >= 0 && TICK >= readyTick) {
+                if (readyTick > 0 && tick >= readyTick) {
                     state.windriposte$setArmed(true);
 
-                    // clear timers so it doesn’t loop forever
-                    state.windriposte$setReadyTick(-1);
+                    // clear schedule
+                    state.windriposte$setReadyTick(0);
                     state.windriposte$setInhaleTick(-1);
                     state.windriposte$setLandTick(-1);
-                    state.windriposte$setPlayedInhale(false);
-                    state.windriposte$setPlayedLand(false);
                 }
             }
         });
