@@ -133,7 +133,7 @@ public abstract class BlocksAttacksComponentMixin {
         );
 
         // 2) CROWD AoE with DISTANCE FALLOFF (excluding attacker)
-        Box box = player.getBoundingBox().expand(CROWD_MAX_RANGE, 2.0, CROWD_MAX_RANGE);
+        Box box = player.getBoundingBox().expand(CROWD_MAX_RANGE, 4.0, CROWD_MAX_RANGE);
 
         List<Entity> entities = world.getOtherEntities(
                 player,
