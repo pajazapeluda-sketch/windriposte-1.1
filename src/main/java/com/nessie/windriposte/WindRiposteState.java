@@ -3,7 +3,8 @@ package com.nessie.windriposte;
 import net.minecraft.entity.LivingEntity;
 
 public interface WindRiposteState {
-    // attacker + enchant level captured when damage happens
+
+    // ---- attacker + level captured on hit ----
     LivingEntity windriposte$getLastAttacker();
     void windriposte$setLastAttacker(LivingEntity attacker);
 
@@ -12,16 +13,23 @@ public interface WindRiposteState {
 
     void windriposte$clearLastAttacker();
 
-    // shield cooldown tracking + “riposte ready” gating
-    boolean windriposte$getWasShieldCoolingDown();
-    void windriposte$setWasShieldCoolingDown(boolean v);
+    // ---- gating (riposte only when armed) ----
+    boolean windriposte$isArmed();
+    void windriposte$setArmed(boolean armed);
 
-    boolean windriposte$getRiposteReady();
-    void windriposte$setRiposteReady(boolean v);
+    // ---- sound scheduling + “play once” flags ----
+    long windriposte$getLandTick();
+    void windriposte$setLandTick(long tick);
 
-    long windriposte$getRiposteReadyAtTick();
-    void windriposte$setRiposteReadyAtTick(long tick);
+    long windriposte$getInhaleTick();
+    void windriposte$setInhaleTick(long tick);
 
-    long windriposte$getLastShieldDisableTick();
-    void windriposte$setLastShieldDisableTick(long tick);
+    long windriposte$getReadyTick();
+    void windriposte$setReadyTick(long tick);
+
+    boolean windriposte$getPlayedLand();
+    void windriposte$setPlayedLand(boolean v);
+
+    boolean windriposte$getPlayedInhale();
+    void windriposte$setPlayedInhale(boolean v);
 }
