@@ -1,54 +1,97 @@
 package com.nessie.windriposte.mixin;
 
 import com.nessie.windriposte.WindRiposteState;
+import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 
 @Mixin(PlayerEntity.class)
 public abstract class PlayerEntityWindRiposteStateMixin implements WindRiposteState {
 
-    private long windriposte$readyTick = 0L;
-    private long windriposte$inhaleTick = -1L;
-    private long windriposte$landTick = -1L;
+    @Unique private LivingEntity windriposte$lastAttacker;
 
-    private boolean windriposte$playedInhale = false;
-    private boolean windriposte$playedLand = false;
+    @Unique private boolean windriposte$armed = true;
 
-    private boolean windriposte$armed = true; // start armed by default
+    @Unique private long windriposte$landTick = -1;
+    @Unique private long windriposte$inhaleTick = -1;
+    @Unique private long windriposte$readyTick = -1;
 
-    @Override
-    public long windriposte$getReadyTick() { return windriposte$readyTick; }
-
-    @Override
-    public void windriposte$setReadyTick(long tick) { this.windriposte$readyTick = tick; }
+    @Unique private boolean windriposte$playedLand = false;
+    @Unique private boolean windriposte$playedInhale = false;
 
     @Override
-    public long windriposte$getInhaleTick() { return windriposte$inhaleTick; }
+    public LivingEntity windriposte$getLastAttacker() {
+        return windriposte$lastAttacker;
+    }
 
     @Override
-    public void windriposte$setInhaleTick(long tick) { this.windriposte$inhaleTick = tick; }
+    public void windriposte$setLastAttacker(LivingEntity attacker) {
+        windriposte$lastAttacker = attacker;
+    }
 
     @Override
-    public long windriposte$getLandTick() { return windriposte$landTick; }
+    public void windriposte$clearLastAttacker() {
+        windriposte$lastAttacker = null;
+    }
 
     @Override
-    public void windriposte$setLandTick(long tick) { this.windriposte$landTick = tick; }
+    public boolean windriposte$isArmed() {
+        return windriposte$armed;
+    }
 
     @Override
-    public boolean windriposte$getPlayedInhale() { return windriposte$playedInhale; }
+    public void windriposte$setArmed(boolean armed) {
+        windriposte$armed = armed;
+    }
 
     @Override
-    public void windriposte$setPlayedInhale(boolean v) { this.windriposte$playedInhale = v; }
+    public long windriposte$getLandTick() {
+        return windriposte$landTick;
+    }
 
     @Override
-    public boolean windriposte$getPlayedLand() { return windriposte$playedLand; }
+    public void windriposte$setLandTick(long t) {
+        windriposte$landTick = t;
+    }
 
     @Override
-    public void windriposte$setPlayedLand(boolean v) { this.windriposte$playedLand = v; }
+    public long windriposte$getInhaleTick() {
+        return windriposte$inhaleTick;
+    }
 
     @Override
-    public boolean windriposte$isArmed() { return windriposte$armed; }
+    public void windriposte$setInhaleTick(long t) {
+        windriposte$inhaleTick = t;
+    }
 
     @Override
-    public void windriposte$setArmed(boolean v) { this.windriposte$armed = v; }
+    public long windriposte$getReadyTick() {
+        return windriposte$readyTick;
+    }
+
+    @Override
+    public void windriposte$setReadyTick(long t) {
+        windriposte$readyTick = t;
+    }
+
+    @Override
+    public boolean windriposte$getPlayedLand() {
+        return windriposte$playedLand;
+    }
+
+    @Override
+    public void windriposte$setPlayedLand(boolean v) {
+        windriposte$playedLand = v;
+    }
+
+    @Override
+    public boolean windriposte$getPlayedInhale() {
+        return windriposte$playedInhale;
+    }
+
+    @Override
+    public void windriposte$setPlayedInhale(boolean v) {
+        windriposte$playedInhale = v;
+    }
 }
