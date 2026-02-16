@@ -12,18 +12,31 @@ import net.minecraft.particle.ParticleTypes;
 import net.minecraft.registry.Registry;
 import net.minecraft.registry.RegistryKeys;
 import net.minecraft.registry.entry.RegistryEntry;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.Identifier;
+import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import java.util.List;
+
 @Mixin(BlocksAttacksComponent.class)
 public abstract class BlocksAttacksComponentMixin {
+
+    // Vanilla shield disable is 5s = 100 ticks (this is the "shield disabled" cooldown)
+    private static final int SHIELD_DISABLED_TICKS = 100;
+
+    // Breeze inhale length-ish. Adjust this number to match what you hear (try 18–28)
+    private static final int INHALE_TICKS = 22;
+
+    // AoE tuning
+    private static final double RADIUS = 3.5;
 
     @Inject(method = "applyShieldCooldown", at = @At("HEAD"))
     private static void windriposte$onShieldDisabled(
@@ -36,70 +49,95 @@ public abstract class BlocksAttacksComponentMixin {
         if (!(defender instanceof PlayerEntity player)) return;
         if (shield == null || shield.isEmpty()) return;
 
-        // must have the enchant on THIS shield
-        Registry<Enchantment> enchReg = world.getRegistryManager().getOrThrow(RegistryKeys.ENCHANTMENT);
-        RegistryEntry<Enchantment> windRiposteEntry =
-                enchReg.getEntry(Identifier.of(WindRiposteMod.MODID, "wind_riposte")).orElse(null);
-        if (windRiposteEntry == null) return;
-
-        int level = EnchantmentHelper.getLevel(windRiposteEntry, shield);
+        // Only run if the shield actually has the enchant
+        int level = getWindRiposteLevel(world, shield);
         if (level <= 0) return;
 
         WindRiposteState state = (WindRiposteState) player;
-        long now = world.getTime();
 
-        // Check if enchant is currently armed BEFORE we disarm it
-        boolean armed = now >= state.windriposte$getReadyTick();
+        // If we're not armed, we still reschedule sounds/timing (fixes your issue #3)
+        scheduleSoundsAndArming(world.getServer(), player, state);
 
-        // Every disable disarms + schedules rearm behavior
-        state.windriposte$setReadyTick(Long.MAX_VALUE);     // disarmed until cooldown ends + inhale finishes
-        state.windriposte$setPendingRearm(true);            // tells tick mixin to play land+inhale when cooldown ends
+        // Only push when armed
+        if (!state.windriposte$isArmed()) return;
 
-        // Only trigger the actual push if it was armed at the moment of disable
-        if (!armed) return;
+        // Disarm immediately so it can't chain-trigger while disabled
+        state.windriposte$setArmed(false);
 
-        LivingEntity attacker = state.windriposte$getLastAttacker();
-        state.windriposte$clearLastAttacker();
-        if (attacker == null || attacker.isRemoved()) return;
+        // Push everything around you (including behind you, like you decided to keep 😈)
+        doAoEPush(world, player, level);
 
-        // Push all around you
-        final double strength = 1.25 + 0.75 * (level - 1);
-        final double lift     = 0.15 + 0.10 * (level - 1);
-
-        Vec3d center = new Vec3d(player.getX(), player.getY(), player.getZ());
-
-        for (LivingEntity e : world.getEntitiesByClass(
-                LivingEntity.class,
-                player.getBoundingBox().expand(4.0),
-                ent -> ent != player && !ent.isRemoved()
-        )) {
-            Vec3d ePos = new Vec3d(e.getX(), e.getY(), e.getZ());
-            Vec3d dir = ePos.subtract(center);
-            dir = new Vec3d(dir.x, 0.0, dir.z);
-            if (dir.lengthSquared() < 1.0E-6) continue;
-            dir = dir.normalize();
-
-            e.addVelocity(dir.x * strength, lift, dir.z * strength);
-            e.velocityDirty = true;
-
-            world.spawnParticles(
-                    ParticleTypes.GUST,
-                    e.getX(),
-                    e.getBodyY(0.5),
-                    e.getZ(),
-                    10 + (level * 8),
-                    0.25, 0.15, 0.25,
-                    0.02
-            );
-        }
+        // Particles & burst sound at activation moment
+        world.spawnParticles(
+                ParticleTypes.GUST,
+                player.getX(),
+                player.getBodyY(0.6),
+                player.getZ(),
+                18 + (level * 10),
+                0.35, 0.18, 0.35,
+                0.03
+        );
 
         world.playSound(
                 null,
-                player.getX(), player.getY(), player.getZ(),
+                player.getX(),
+                player.getY(),
+                player.getZ(),
                 SoundEvents.ENTITY_BREEZE_WIND_BURST,
                 SoundCategory.PLAYERS,
                 1.0f,
                 1.0f
         );
+    }
+
+    private static int getWindRiposteLevel(ServerWorld world, ItemStack shield) {
+        Registry<Enchantment> enchReg = world.getRegistryManager().getOrThrow(RegistryKeys.ENCHANTMENT);
+        RegistryEntry<Enchantment> entry = enchReg.getEntry(Identifier.of(WindRiposteMod.MODID, "wind_riposte")).orElse(null);
+        if (entry == null) return 0;
+        return EnchantmentHelper.getLevel(entry, shield);
+    }
+
+    private static void scheduleSoundsAndArming(MinecraftServer server, PlayerEntity player, WindRiposteState state) {
+        long now = server.getTicks();
+
+        long shieldBackTick = now + SHIELD_DISABLED_TICKS;      // exact moment shield returns
+        long readyTick      = shieldBackTick + INHALE_TICKS;    // enchant becomes active after inhale finishes
+
+        // Reset schedule every time (even if already cooling down)
+        state.windriposte$setLandTick(shieldBackTick);
+        state.windriposte$setInhaleTick(shieldBackTick);
+
+        state.windriposte$setPlayedLand(false);
+        state.windriposte$setPlayedInhale(false);
+
+        state.windriposte$setReadyTick(readyTick);
+        // armed stays false until readyTick hits (WindRiposteMod tick handler flips it)
+    }
+
+    private static void doAoEPush(ServerWorld world, PlayerEntity player, int level) {
+        Vec3d center = new Vec3d(player.getX(), player.getY(), player.getZ());
+
+        Box box = player.getBoundingBox().expand(RADIUS, 1.5, RADIUS);
+        List<LivingEntity> targets = world.getEntitiesByClass(
+                LivingEntity.class,
+                box,
+                e -> e != player && e.isAlive() && !e.isRemoved()
+        );
+
+        // Balance by level (tweak freely)
+        double strength = 1.1 + 0.55 * (level - 1); // 1.1, 1.65, 2.2
+        double lift     = 0.12 + 0.07 * (level - 1); // 0.12, 0.19, 0.26
+
+        for (LivingEntity e : targets) {
+            Vec3d ePos = new Vec3d(e.getX(), e.getY(), e.getZ());
+            Vec3d dir = ePos.subtract(center);
+            dir = new Vec3d(dir.x, 0.0, dir.z);
+
+            if (dir.lengthSquared() < 1.0E-6) continue;
+            dir = dir.normalize();
+
+            e.addVelocity(dir.x * strength, lift, dir.z * strength);
+            e.velocityDirty = true;
+        }
     }
 }
