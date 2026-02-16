@@ -26,9 +26,8 @@ public class WindRiposteMod implements ModInitializer {
             for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
                 WindRiposteState state = (WindRiposteState) player;
 
-                // Inhale/land/arming all happen in the player's current ServerWorld
-                ServerWorld world = player.getServer().getWorld(player.getWorld().getRegistryKey());
-                if (world == null) continue;
+                // World: use the player's current ServerWorld directly
+                ServerWorld world = player.getServerWorld();
 
                 // LAND exactly when shield returns
                 long landTick = state.windriposte$getLandTick();
