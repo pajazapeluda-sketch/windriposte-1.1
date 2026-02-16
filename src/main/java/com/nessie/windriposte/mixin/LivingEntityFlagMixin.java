@@ -8,14 +8,23 @@ import org.spongepowered.asm.mixin.Unique;
 @Mixin(LivingEntity.class)
 public abstract class LivingEntityFlagMixin implements WindRiposteState {
 
+    // attacker + level
     @Unique private LivingEntity windriposte$lastAttacker;
-    @Unique private int windriposte$lastLevel;
+    @Unique private int windriposte$lastLevel = 0;
 
-    @Unique private boolean windriposte$wasShieldCoolingDown = false;
-    @Unique private boolean windriposte$riposteReady = true;
-    @Unique private long windriposte$riposteReadyAtTick = 0L;
-    @Unique private long windriposte$lastShieldDisableTick = -1L;
+    // armed gate
+    @Unique private boolean windriposte$armed = true;
 
+    // sound schedule ticks
+    @Unique private long windriposte$landTick = -1L;
+    @Unique private long windriposte$inhaleTick = -1L;
+    @Unique private long windriposte$readyTick = -1L;
+
+    // sound “play once”
+    @Unique private boolean windriposte$playedLand = false;
+    @Unique private boolean windriposte$playedInhale = false;
+
+    // ---------------- attacker + level ----------------
     @Override
     public LivingEntity windriposte$getLastAttacker() {
         return windriposte$lastAttacker;
@@ -23,7 +32,7 @@ public abstract class LivingEntityFlagMixin implements WindRiposteState {
 
     @Override
     public void windriposte$setLastAttacker(LivingEntity attacker) {
-        windriposte$lastAttacker = attacker;
+        this.windriposte$lastAttacker = attacker;
     }
 
     @Override
@@ -33,52 +42,75 @@ public abstract class LivingEntityFlagMixin implements WindRiposteState {
 
     @Override
     public void windriposte$setLastLevel(int level) {
-        windriposte$lastLevel = level;
+        this.windriposte$lastLevel = level;
     }
 
     @Override
     public void windriposte$clearLastAttacker() {
-        windriposte$lastAttacker = null;
-        windriposte$lastLevel = 0;
+        this.windriposte$lastAttacker = null;
+        this.windriposte$lastLevel = 0;
+    }
+
+    // ---------------- armed ----------------
+    @Override
+    public boolean windriposte$isArmed() {
+        return windriposte$armed;
     }
 
     @Override
-    public boolean windriposte$getWasShieldCoolingDown() {
-        return windriposte$wasShieldCoolingDown;
+    public void windriposte$setArmed(boolean armed) {
+        this.windriposte$armed = armed;
+    }
+
+    // ---------------- ticks ----------------
+    @Override
+    public long windriposte$getLandTick() {
+        return windriposte$landTick;
     }
 
     @Override
-    public void windriposte$setWasShieldCoolingDown(boolean v) {
-        windriposte$wasShieldCoolingDown = v;
+    public void windriposte$setLandTick(long tick) {
+        this.windriposte$landTick = tick;
     }
 
     @Override
-    public boolean windriposte$getRiposteReady() {
-        return windriposte$riposteReady;
+    public long windriposte$getInhaleTick() {
+        return windriposte$inhaleTick;
     }
 
     @Override
-    public void windriposte$setRiposteReady(boolean v) {
-        windriposte$riposteReady = v;
+    public void windriposte$setInhaleTick(long tick) {
+        this.windriposte$inhaleTick = tick;
     }
 
     @Override
-    public long windriposte$getRiposteReadyAtTick() {
-        return windriposte$riposteReadyAtTick;
+    public long windriposte$getReadyTick() {
+        return windriposte$readyTick;
     }
 
     @Override
-    public void windriposte$setRiposteReadyAtTick(long tick) {
-        windriposte$riposteReadyAtTick = tick;
+    public void windriposte$setReadyTick(long tick) {
+        this.windriposte$readyTick = tick;
+    }
+
+    // ---------------- played flags ----------------
+    @Override
+    public boolean windriposte$getPlayedLand() {
+        return windriposte$playedLand;
     }
 
     @Override
-    public long windriposte$getLastShieldDisableTick() {
-        return windriposte$lastShieldDisableTick;
+    public void windriposte$setPlayedLand(boolean v) {
+        this.windriposte$playedLand = v;
     }
 
     @Override
-    public void windriposte$setLastShieldDisableTick(long tick) {
-        windriposte$lastShieldDisableTick = tick;
+    public boolean windriposte$getPlayedInhale() {
+        return windriposte$playedInhale;
+    }
+
+    @Override
+    public void windriposte$setPlayedInhale(boolean v) {
+        this.windriposte$playedInhale = v;
     }
 }
