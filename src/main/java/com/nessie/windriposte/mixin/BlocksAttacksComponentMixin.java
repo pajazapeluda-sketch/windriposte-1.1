@@ -5,6 +5,7 @@ import com.nessie.windriposte.WindRiposteState;
 import net.minecraft.component.type.BlocksAttacksComponent;
 import net.minecraft.enchantment.Enchantment;
 import net.minecraft.enchantment.EnchantmentHelper;
+import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
@@ -17,11 +18,14 @@ import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.Box;
+import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+import java.util.List;
 
 @Mixin(BlocksAttacksComponent.class)
 public abstract class BlocksAttacksComponentMixin {
@@ -30,6 +34,10 @@ public abstract class BlocksAttacksComponentMixin {
     // Make this match how long you want the inhale lead-up to be.
     private static final int EXTRA_ARM_DELAY_TICKS = 20;  // 1.0s
     private static final int INHALE_LEAD_TICKS     = 20;  // start inhale 1.0s before re-arm
+
+    // Crowd settings
+    private static final double CROWD_MAX_RANGE = 5.5; // blocks
+    private static final double CROWD_PARTICLE_CHANCE = 0.45; // not every mob needs particles
 
     @Inject(method = "applyShieldCooldown", at = @At("HEAD"))
     private static void windriposte$onShieldDisabled(
@@ -66,7 +74,6 @@ public abstract class BlocksAttacksComponentMixin {
         long now = world.getTime();
 
         // Vanilla shield disable is 5 seconds = 100 ticks.
-        // Some versions pass "amount" that is NOT reliable as ticks, so we hardcode the known vanilla value.
         long shieldBackTick = now + 100;
 
         // Enchant becomes active AFTER the extra delay, not when shield returns.
@@ -90,60 +97,99 @@ public abstract class BlocksAttacksComponentMixin {
         // --- Only apply the knockback if we were armed at the moment of disable ---
         if (!armed) return;
 
-        // Clear stored attacker so it doesn't linger (even though we're doing AoE now)
+        // Identify the TRUE attacker (the one who disabled the shield)
+        LivingEntity attacker = state.windriposte$getLastAttacker();
         state.windriposte$clearLastAttacker();
+        if (attacker == null) return;
+        if (attacker.isRemoved()) return;
 
-        // --------- CROWD VERSION (AoE) ---------
-        // Radius scales slightly with level (tweak freely)
-        double radius = 3.25 + 0.75 * (level - 1); // L1 3.25, L2 4.0, L3 4.75
-        Box box = player.getBoundingBox().expand(radius, 1.5, radius);
+        // Level-based base strength/lift (full power for attacker)
+        double baseStrength = 1.25 + 0.75 * (level - 1);
+        double baseLift     = 0.15 + 0.10 * (level - 1);
 
-        // Balance by level (same for everyone hit)
-        double strength = 1.25 + 0.75 * (level - 1);
-        double lift     = 0.15 + 0.10 * (level - 1);
+        // 1) FULL POWER to attacker (always)
+        pushEntityAwayFromPlayer(attacker, player, baseStrength, baseLift);
 
-        boolean hitSomeone = false;
+        // Burst particles + sound centered on attacker (feels responsive)
+        world.spawnParticles(
+                ParticleTypes.GUST,
+                attacker.getX(),
+                attacker.getBodyY(0.5),
+                attacker.getZ(),
+                10 + (level * 8),
+                0.25, 0.15, 0.25,
+                0.02
+        );
 
-        for (LivingEntity e : world.getEntitiesByClass(LivingEntity.class, box, e -> e != null && e.isAlive() && e != player)) {
-            if (e.isRemoved()) continue;
+        world.playSound(
+                null,
+                attacker.getX(),
+                attacker.getY(),
+                attacker.getZ(),
+                SoundEvents.ENTITY_BREEZE_WIND_BURST,
+                SoundCategory.PLAYERS,
+                1.0f,
+                1.0f
+        );
 
-            Vec3d ePos = new Vec3d(e.getX(), e.getY(), e.getZ());
-            Vec3d pPos = new Vec3d(player.getX(), player.getY(), player.getZ());
+        // 2) CROWD AoE with DISTANCE FALLOFF (excluding attacker)
+        Box box = player.getBoundingBox().expand(CROWD_MAX_RANGE, 2.0, CROWD_MAX_RANGE);
 
-            Vec3d dir = ePos.subtract(pPos);
-            dir = new Vec3d(dir.x, 0.0, dir.z);
+        List<Entity> entities = world.getOtherEntities(
+                player,
+                box,
+                e -> e instanceof LivingEntity le && le != attacker && !le.isRemoved()
+        );
 
-            if (dir.lengthSquared() < 1.0E-6) continue;
-            dir = dir.normalize();
+        for (Entity e : entities) {
+            LivingEntity le = (LivingEntity) e;
 
-            e.addVelocity(dir.x * strength, lift, dir.z * strength);
-            e.velocityDirty = true;
+            // Horizontal distance from player (don’t punish Y differences)
+            double dx = le.getX() - player.getX();
+            double dz = le.getZ() - player.getZ();
+            double dist = Math.sqrt(dx * dx + dz * dz);
 
-            world.spawnParticles(
-                    ParticleTypes.GUST,
-                    e.getX(),
-                    e.getBodyY(0.5),
-                    e.getZ(),
-                    8 + (level * 6),
-                    0.25, 0.15, 0.25,
-                    0.02
-            );
+            if (dist <= 1.0E-6) continue;
+            if (dist > CROWD_MAX_RANGE) continue;
 
-            hitSomeone = true;
+            // Linear falloff: 1 at dist=0 → 0 at dist=maxRange
+            double t = 1.0 - (dist / CROWD_MAX_RANGE);
+            t = MathHelper.clamp(t, 0.0, 1.0);
+
+            // Scale strength/lift by falloff
+            double strength = baseStrength * t;
+            double lift = baseLift * (0.35 + 0.65 * t); // crowd lift is softer so it doesn’t look goofy at edge
+
+            if (strength <= 0.01) continue;
+
+            pushEntityAwayFromPlayer(le, player, strength, lift);
+
+            // Optional: occasional gust particles for crowd, not all of them (keeps it readable)
+            if (world.random.nextDouble() < CROWD_PARTICLE_CHANCE) {
+                world.spawnParticles(
+                        ParticleTypes.GUST,
+                        le.getX(),
+                        le.getBodyY(0.5),
+                        le.getZ(),
+                        4 + (int)(6 * t),
+                        0.18, 0.10, 0.18,
+                        0.01
+                );
+            }
         }
+    }
 
-        // One burst sound for the whole crowd pop (not per entity)
-        if (hitSomeone) {
-            world.playSound(
-                    null,
-                    player.getX(),
-                    player.getY(),
-                    player.getZ(),
-                    SoundEvents.ENTITY_BREEZE_WIND_BURST,
-                    SoundCategory.PLAYERS,
-                    1.0f,
-                    1.0f
-            );
-        }
+    private static void pushEntityAwayFromPlayer(LivingEntity target, PlayerEntity player, double strength, double lift) {
+        Vec3d targetPos = new Vec3d(target.getX(), target.getY(), target.getZ());
+        Vec3d playerPos = new Vec3d(player.getX(), player.getY(), player.getZ());
+
+        Vec3d dir = targetPos.subtract(playerPos);
+        dir = new Vec3d(dir.x, 0.0, dir.z);
+
+        if (dir.lengthSquared() < 1.0E-6) return;
+        dir = dir.normalize();
+
+        target.addVelocity(dir.x * strength, lift, dir.z * strength);
+        target.velocityDirty = true;
     }
 }
