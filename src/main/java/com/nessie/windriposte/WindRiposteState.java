@@ -1,23 +1,27 @@
 package com.nessie.windriposte;
 
+import net.minecraft.entity.LivingEntity;
+
 public interface WindRiposteState {
-    // When the enchant is allowed to trigger again
-    long windriposte$getReadyTick();
-    void windriposte$setReadyTick(long tick);
+    // attacker + level captured when the hit happens
+    LivingEntity windriposte$getLastAttacker();
+    void windriposte$setLastAttacker(LivingEntity attacker);
 
-    // One-shot sound scheduling
-    long windriposte$getInhaleTick();
-    void windriposte$setInhaleTick(long tick);
+    int windriposte$getLastLevel();
+    void windriposte$setLastLevel(int level);
 
-    long windriposte$getLandTick();
-    void windriposte$setLandTick(long tick);
+    void windriposte$clearLastAttacker();
 
-    boolean windriposte$getPlayedInhale();
-    void windriposte$setPlayedInhale(boolean v);
+    // --- cooldown / arming state ---
+    boolean windriposte$getWasShieldCoolingDown();
+    void windriposte$setWasShieldCoolingDown(boolean v);
 
-    boolean windriposte$getPlayedLand();
-    void windriposte$setPlayedLand(boolean v);
+    boolean windriposte$getRiposteReady();
+    void windriposte$setRiposteReady(boolean v);
 
-    boolean windriposte$isArmed();
-    void windriposte$setArmed(boolean v);
+    long windriposte$getRiposteReadyAtTick();
+    void windriposte$setRiposteReadyAtTick(long tick);
+
+    long windriposte$getLastShieldDisableTick();
+    void windriposte$setLastShieldDisableTick(long tick);
 }
