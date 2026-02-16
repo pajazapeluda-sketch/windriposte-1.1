@@ -6,7 +6,6 @@ import net.minecraft.enchantment.Enchantment;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.registry.RegistryKeys;
 import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.Identifier;
@@ -26,17 +25,13 @@ public class WindRiposteMod implements ModInitializer {
             for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
                 WindRiposteState state = (WindRiposteState) player;
 
-                // Works in your mappings:
-                ServerWorld world = (ServerWorld) player.getWorld();
-
                 // LAND exactly when shield returns
                 long landTick = state.windriposte$getLandTick();
                 if (landTick >= 0 && !state.windriposte$getPlayedLand() && tick >= landTick) {
                     state.windriposte$setPlayedLand(true);
 
-                    world.playSound(
-                            null,
-                            player.getX(), player.getY(), player.getZ(),
+                    // plays at the player's position (no world lookup needed)
+                    player.playSound(
                             SoundEvents.ENTITY_BREEZE_LAND,
                             SoundCategory.PLAYERS,
                             1.0f,
@@ -44,14 +39,12 @@ public class WindRiposteMod implements ModInitializer {
                     );
                 }
 
-                // INHALE lead-up to re-arm
+                // INHALE as the lead-up to enchant re-arm
                 long inhaleTick = state.windriposte$getInhaleTick();
                 if (inhaleTick >= 0 && !state.windriposte$getPlayedInhale() && tick >= inhaleTick) {
                     state.windriposte$setPlayedInhale(true);
 
-                    world.playSound(
-                            null,
-                            player.getX(), player.getY(), player.getZ(),
+                    player.playSound(
                             SoundEvents.ENTITY_BREEZE_INHALE,
                             SoundCategory.PLAYERS,
                             1.0f,
