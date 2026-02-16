@@ -1,31 +1,25 @@
 package com.nessie.windriposte;
 
-import net.minecraft.entity.LivingEntity;
-
 public interface WindRiposteState {
 
-    // ---- attacker + level captured on hit ----
-    LivingEntity windriposte$getLastAttacker();
-    void windriposte$setLastAttacker(LivingEntity attacker);
-
-    int windriposte$getLastLevel();
-    void windriposte$setLastLevel(int level);
-
+    // attacker storage (set elsewhere, used by riposte)
+    net.minecraft.entity.LivingEntity windriposte$getLastAttacker();
+    void windriposte$setLastAttacker(net.minecraft.entity.LivingEntity attacker);
     void windriposte$clearLastAttacker();
 
-    // ---- gating (riposte only when armed) ----
+    // enchant "armed" gating
     boolean windriposte$isArmed();
     void windriposte$setArmed(boolean armed);
 
-    // ---- sound scheduling + “play once” flags ----
+    // sound + rearm timing (server ticks)
     long windriposte$getLandTick();
-    void windriposte$setLandTick(long tick);
+    void windriposte$setLandTick(long t);
 
     long windriposte$getInhaleTick();
-    void windriposte$setInhaleTick(long tick);
+    void windriposte$setInhaleTick(long t);
 
     long windriposte$getReadyTick();
-    void windriposte$setReadyTick(long tick);
+    void windriposte$setReadyTick(long t);
 
     boolean windriposte$getPlayedLand();
     void windriposte$setPlayedLand(boolean v);
