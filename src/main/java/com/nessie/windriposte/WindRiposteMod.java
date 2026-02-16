@@ -1,55 +1,70 @@
 package com.nessie.windriposte;
 
+import com.nessie.windriposte.mixin.EntityWorldAccessor;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
-import net.minecraft.enchantment.Enchantment;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.server.world.ServerWorld;
+import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
-import net.minecraft.util.Identifier;
 
 public class WindRiposteMod implements ModInitializer {
 
     public static final String MODID = "windriposte";
 
-    public static final RegistryKey<Enchantment> WIND_RIPOSTE =
-            RegistryKey.of(RegistryKeys.ENCHANTMENT, Identifier.of(MODID, "wind_riposte"));
+    // global “server tick counter”
+    public static long TICK = 0;
 
     @Override
     public void onInitialize() {
         ServerTickEvents.END_SERVER_TICK.register(server -> {
-            long tick = server.getTicks();
+            TICK++;
 
-            for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
+            for (PlayerEntity player : server.getPlayerManager().getPlayerList()) {
                 WindRiposteState state = (WindRiposteState) player;
 
-                // LAND exactly when shield returns
+                // get ServerWorld safely using accessor (since your mappings hide getWorld())
+                if (!(((EntityWorldAccessor) player).windriposte$getWorld() instanceof ServerWorld world)) continue;
+
+                // LAND (exact moment shield cooldown ends)
                 long landTick = state.windriposte$getLandTick();
-                if (landTick >= 0 && !state.windriposte$getPlayedLand() && tick >= landTick) {
+                if (landTick >= 0 && !state.windriposte$getPlayedLand() && TICK >= landTick) {
                     state.windriposte$setPlayedLand(true);
-
-                    // (SoundEvent, volume, pitch)
-                    player.playSound(SoundEvents.ENTITY_BREEZE_LAND, 1.0f, 1.0f);
+                    world.playSound(
+                            null,
+                            player.getX(), player.getY(), player.getZ(),
+                            SoundEvents.ENTITY_BREEZE_LAND,
+                            SoundCategory.PLAYERS,
+                            1.0f,
+                            1.0f
+                    );
                 }
 
-                // INHALE as the lead-up to enchant re-arm
+                // INHALE (lead-up)
                 long inhaleTick = state.windriposte$getInhaleTick();
-                if (inhaleTick >= 0 && !state.windriposte$getPlayedInhale() && tick >= inhaleTick) {
+                if (inhaleTick >= 0 && !state.windriposte$getPlayedInhale() && TICK >= inhaleTick) {
                     state.windriposte$setPlayedInhale(true);
-
-                    player.playSound(SoundEvents.ENTITY_BREEZE_INHALE, 1.0f, 1.0f);
+                    world.playSound(
+                            null,
+                            player.getX(), player.getY(), player.getZ(),
+                            SoundEvents.ENTITY_BREEZE_INHALE,
+                            SoundCategory.PLAYERS,
+                            1.0f,
+                            1.0f
+                    );
                 }
 
-                // Re-arm when ready tick hits
+                // ready again
                 long readyTick = state.windriposte$getReadyTick();
-                if (readyTick > 0 && tick >= readyTick) {
+                if (readyTick >= 0 && TICK >= readyTick) {
                     state.windriposte$setArmed(true);
 
-                    // clear schedule
-                    state.windriposte$setReadyTick(0);
+                    // clear timers so it doesn’t loop forever
+                    state.windriposte$setReadyTick(-1);
                     state.windriposte$setInhaleTick(-1);
                     state.windriposte$setLandTick(-1);
+                    state.windriposte$setPlayedInhale(false);
+                    state.windriposte$setPlayedLand(false);
                 }
             }
         });
