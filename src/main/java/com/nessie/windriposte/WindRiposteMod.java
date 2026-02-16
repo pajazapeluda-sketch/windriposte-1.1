@@ -26,8 +26,8 @@ public class WindRiposteMod implements ModInitializer {
             for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
                 WindRiposteState state = (WindRiposteState) player;
 
-                // World: use the player's current ServerWorld directly
-                ServerWorld world = player.getServerWorld();
+                // Works in your mappings:
+                ServerWorld world = (ServerWorld) player.getWorld();
 
                 // LAND exactly when shield returns
                 long landTick = state.windriposte$getLandTick();
