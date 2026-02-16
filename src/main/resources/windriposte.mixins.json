@@ -4,10 +4,12 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "BlocksAttacksComponentMixin",
+    "EntityWorldAccessor",
     "LivingEntityFlagMixin",
     "PlayerEntityWindRiposteStateMixin"
   ],
   "client": [],
+  "server": [],
   "injectors": {
     "defaultRequire": 1
   }
