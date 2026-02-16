@@ -3,7 +3,7 @@ package com.nessie.windriposte;
 import net.minecraft.entity.LivingEntity;
 
 public interface WindRiposteState {
-    // attacker + level captured when the hit happens
+    // attacker + enchant level captured when damage happens
     LivingEntity windriposte$getLastAttacker();
     void windriposte$setLastAttacker(LivingEntity attacker);
 
@@ -12,7 +12,7 @@ public interface WindRiposteState {
 
     void windriposte$clearLastAttacker();
 
-    // --- cooldown / arming state ---
+    // shield cooldown tracking + “riposte ready” gating
     boolean windriposte$getWasShieldCoolingDown();
     void windriposte$setWasShieldCoolingDown(boolean v);
 
