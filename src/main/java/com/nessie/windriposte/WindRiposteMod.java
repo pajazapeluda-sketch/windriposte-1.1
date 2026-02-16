@@ -6,7 +6,6 @@ import net.minecraft.enchantment.Enchantment;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.registry.RegistryKeys;
 import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.Identifier;
 
@@ -30,13 +29,8 @@ public class WindRiposteMod implements ModInitializer {
                 if (landTick >= 0 && !state.windriposte$getPlayedLand() && tick >= landTick) {
                     state.windriposte$setPlayedLand(true);
 
-                    // plays at the player's position (no world lookup needed)
-                    player.playSound(
-                            SoundEvents.ENTITY_BREEZE_LAND,
-                            SoundCategory.PLAYERS,
-                            1.0f,
-                            1.0f
-                    );
+                    // (SoundEvent, volume, pitch)
+                    player.playSound(SoundEvents.ENTITY_BREEZE_LAND, 1.0f, 1.0f);
                 }
 
                 // INHALE as the lead-up to enchant re-arm
@@ -44,12 +38,7 @@ public class WindRiposteMod implements ModInitializer {
                 if (inhaleTick >= 0 && !state.windriposte$getPlayedInhale() && tick >= inhaleTick) {
                     state.windriposte$setPlayedInhale(true);
 
-                    player.playSound(
-                            SoundEvents.ENTITY_BREEZE_INHALE,
-                            SoundCategory.PLAYERS,
-                            1.0f,
-                            1.0f
-                    );
+                    player.playSound(SoundEvents.ENTITY_BREEZE_INHALE, 1.0f, 1.0f);
                 }
 
                 // Re-arm when ready tick hits
