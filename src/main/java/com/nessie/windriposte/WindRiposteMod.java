@@ -69,6 +69,9 @@ public class WindRiposteMod implements ModInitializer {
             if (readyTick > 0 && tick >= readyTick) {
                 state.windriposte$setArmed(true);
 
+                // CONFIRMATION (actionbar)
+                player.sendMessage(net.minecraft.text.Text.literal("§a[WindRiposte] READY"), true);
+                
                 // clear schedule
                 state.windriposte$setReadyTick(0);
                 state.windriposte$setInhaleTick(-1);
