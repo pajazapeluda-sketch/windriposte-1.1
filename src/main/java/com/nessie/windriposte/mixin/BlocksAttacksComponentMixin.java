@@ -16,6 +16,7 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.util.Identifier;
+import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -89,47 +90,60 @@ public abstract class BlocksAttacksComponentMixin {
         // --- Only apply the knockback if we were armed at the moment of disable ---
         if (!armed) return;
 
-        LivingEntity attacker = state.windriposte$getLastAttacker();
+        // Clear stored attacker so it doesn't linger (even though we're doing AoE now)
         state.windriposte$clearLastAttacker();
-        if (attacker == null) return;
-        if (attacker.isRemoved()) return;
 
-        // Push direction: away from player (horizontal)
-        Vec3d attackerPos = new Vec3d(attacker.getX(), attacker.getY(), attacker.getZ());
-        Vec3d playerPos   = new Vec3d(player.getX(), player.getY(), player.getZ());
+        // --------- CROWD VERSION (AoE) ---------
+        // Radius scales slightly with level (tweak freely)
+        double radius = 3.25 + 0.75 * (level - 1); // L1 3.25, L2 4.0, L3 4.75
+        Box box = player.getBoundingBox().expand(radius, 1.5, radius);
 
-        Vec3d dir = attackerPos.subtract(playerPos);
-        dir = new Vec3d(dir.x, 0.0, dir.z);
-        if (dir.lengthSquared() < 1.0E-6) return;
-        dir = dir.normalize();
-
-        // Balance by level
+        // Balance by level (same for everyone hit)
         double strength = 1.25 + 0.75 * (level - 1);
         double lift     = 0.15 + 0.10 * (level - 1);
 
-        attacker.addVelocity(dir.x * strength, lift, dir.z * strength);
-        attacker.velocityDirty = true;
+        boolean hitSomeone = false;
 
-        // Wind particles + burst sound on hit
-        world.spawnParticles(
-                ParticleTypes.GUST,
-                attacker.getX(),
-                attacker.getBodyY(0.5),
-                attacker.getZ(),
-                10 + (level * 8),
-                0.25, 0.15, 0.25,
-                0.02
-        );
+        for (LivingEntity e : world.getEntitiesByClass(LivingEntity.class, box, e -> e != null && e.isAlive() && e != player)) {
+            if (e.isRemoved()) continue;
 
-        world.playSound(
-                null,
-                attacker.getX(),
-                attacker.getY(),
-                attacker.getZ(),
-                SoundEvents.ENTITY_BREEZE_WIND_BURST,
-                SoundCategory.PLAYERS,
-                1.0f,
-                1.0f
-        );
+            Vec3d ePos = new Vec3d(e.getX(), e.getY(), e.getZ());
+            Vec3d pPos = new Vec3d(player.getX(), player.getY(), player.getZ());
+
+            Vec3d dir = ePos.subtract(pPos);
+            dir = new Vec3d(dir.x, 0.0, dir.z);
+
+            if (dir.lengthSquared() < 1.0E-6) continue;
+            dir = dir.normalize();
+
+            e.addVelocity(dir.x * strength, lift, dir.z * strength);
+            e.velocityDirty = true;
+
+            world.spawnParticles(
+                    ParticleTypes.GUST,
+                    e.getX(),
+                    e.getBodyY(0.5),
+                    e.getZ(),
+                    8 + (level * 6),
+                    0.25, 0.15, 0.25,
+                    0.02
+            );
+
+            hitSomeone = true;
+        }
+
+        // One burst sound for the whole crowd pop (not per entity)
+        if (hitSomeone) {
+            world.playSound(
+                    null,
+                    player.getX(),
+                    player.getY(),
+                    player.getZ(),
+                    SoundEvents.ENTITY_BREEZE_WIND_BURST,
+                    SoundCategory.PLAYERS,
+                    1.0f,
+                    1.0f
+            );
+        }
     }
 }
