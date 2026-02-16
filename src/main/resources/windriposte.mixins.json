@@ -1,12 +1,13 @@
 {
   "required": true,
-  "minVersion": "0.8",
   "package": "com.nessie.windriposte.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-  "BlocksAttacksComponentMixin",
-  "LivingEntityFlagMixin"
-],
+    "BlocksAttacksComponentMixin",
+    "LivingEntityFlagMixin",
+    "PlayerEntityWindRiposteStateMixin"
+  ],
+  "client": [],
   "injectors": {
     "defaultRequire": 1
   }
